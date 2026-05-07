@@ -45,8 +45,11 @@
   <!-- DIALOGUE BOX (Pokemon style) -->
   <div id="dialogue-box" class="hidden">
     <div class="dialogue-inner">
-      <div id="dialogue-text"></div>
-      <div id="dialogue-hint" class="hidden">&#9660; SPACE / TAP</div>
+      <div id="dialogue-avatar"></div>
+      <div class="dialogue-body">
+        <div id="dialogue-text"></div>
+        <div id="dialogue-hint" class="hidden">&#9660; SPACE / TAP</div>
+      </div>
     </div>
   </div>
 
@@ -134,10 +137,28 @@
       </div>
       <div class="editor-field">
         <label>TYPE</label>
-        <select id="editor-type">
+        <select id="editor-type" onchange="toggleNpcEmojiPicker()">
           <option value="spot">&#128205; Spot</option>
           <option value="entity">&#129489; NPC / Entity</option>
         </select>
+      </div>
+      <div class="editor-field" id="editor-npc-emoji-row" style="display:none">
+        <label>NPC CHARACTER</label>
+        <div id="editor-npc-emoji-picker">
+          <button type="button" class="npc-emoji-pick" data-emoji="🧑" title="Person">🧑</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="🧑‍🍳" title="Chef">🧑‍🍳</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="🎨" title="Artist">🎨</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="🎸" title="Musician">🎸</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="🧜" title="Sailor">🧜</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="👴" title="Old timer">👴</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="👵" title="Local elder">👵</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="🦞" title="Lobster">🦞</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="🐕" title="Dog">🐕</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="🐈" title="Cat">🐈</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="🦅" title="Bird">🦅</button>
+          <button type="button" class="npc-emoji-pick" data-emoji="👻" title="Ghost">👻</button>
+        </div>
+        <input type="hidden" id="editor-npc-emoji" value="🧑">
       </div>
       <div class="editor-field">
         <label>CATEGORY</label>

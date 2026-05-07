@@ -987,8 +987,10 @@ document.querySelectorAll('.dpad-btn').forEach(btn => {
 function createSpotMarker(spot) {
   if (!spot.visible) return;
 
-  const color = CATEGORY_COLORS[spot.category] || '#E8DCC8';
+  const isNpc      = spot.markerType === 'entity';
+  const color      = CATEGORY_COLORS[spot.category] || '#E8DCC8';
   const discovered = spot.discovered;
+  const wasNew     = !leafletMarkers[spot.id];
 
   // Remove existing marker if any
   if (leafletMarkers[spot.id]) {
@@ -996,13 +998,29 @@ function createSpotMarker(spot) {
     delete leafletMarkers[spot.id];
   }
 
-  const iconHtml = discovered
-    ? `<div class="spot-marker discovered" style="background:${color}">
-         <span>${CATEGORY_EMOJI[spot.category] || '★'}</span>
-       </div>`
-    : `<div class="spot-marker undiscovered">?</div>`;
+  let iconHtml;
+  if (isNpc) {
+    // NPC entities — square-ish badge with a character emoji and a clear "talk" indicator
+    const emoji = spot.npcEmoji || '🧑';
+    iconHtml = `
+      <div class="spot-marker npc ${discovered ? 'discovered' : 'undiscovered'}">
+        <span class="npc-face">${emoji}</span>
+        <span class="npc-bubble">!</span>
+      </div>`;
+  } else if (discovered) {
+    iconHtml = `<div class="spot-marker discovered" style="background:${color}">
+                  <span>${CATEGORY_EMOJI[spot.category] || '★'}</span>
+                </div>`;
+  } else {
+    iconHtml = `<div class="spot-marker undiscovered">?</div>`;
+  }
 
-  const icon = L.divIcon({ html: iconHtml, className: '', iconSize: [32, 32], iconAnchor: [16, 16] });
+  const icon = L.divIcon({
+    html: iconHtml,
+    className: wasNew ? 'spot-marker-fresh' : '',
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
   const marker = L.marker([spot.lat, spot.lng], { icon, zIndexOffset: discovered ? 200 : 100 });
 
   marker.on('click', () => {
@@ -1011,13 +1029,22 @@ function createSpotMarker(spot) {
 
   if (discovered && spot.name) {
     marker.bindTooltip(spot.name, {
-      permanent: true, direction: 'bottom', offset: [0, 8],
+      permanent: true, direction: 'bottom', offset: [0, 10],
       className: 'spot-tooltip'
     });
   }
 
   marker.addTo(map);
   leafletMarkers[spot.id] = marker;
+
+  // Trigger a one-shot "pop-in" animation when the marker first appears on the map
+  if (wasNew) {
+    requestAnimationFrame(() => {
+      const el = marker.getElement();
+      if (el) el.classList.add('reveal');
+      setTimeout(() => { if (el) el.classList.remove('reveal'); }, 600);
+    });
+  }
 }
 
 function refreshAllMarkers() {
@@ -1070,16 +1097,32 @@ function showDialogue(spotId) {
   dialoguePendingId = spotId;
   dialoguePhase = 0;
 
-  const emoji = CATEGORY_EMOJI[spot.category] || '★';
+  const isNpc = spot.markerType === 'entity';
+  const headerEmoji = isNpc ? (spot.npcEmoji || '🧑') : (CATEGORY_EMOJI[spot.category] || '★');
   const firstSentence = spot.description.split('.')[0] + '.';
-  dialogueFullText = `${emoji} ${spot.name}!\n${firstSentence}`;
+  dialogueFullText = isNpc
+    ? `${spot.name}:\n"${firstSentence}"`
+    : `${headerEmoji} ${spot.name}!\n${firstSentence}`;
 
   const box  = document.getElementById('dialogue-box');
   const text = document.getElementById('dialogue-text');
   const hint = document.getElementById('dialogue-hint');
+  const avatar = document.getElementById('dialogue-avatar');
+
+  // Avatar (only for NPCs) — animated emoji at left of dialogue
+  if (avatar) {
+    if (isNpc) {
+      avatar.textContent = spot.npcEmoji || '🧑';
+      avatar.style.display = 'flex';
+    } else {
+      avatar.style.display = 'none';
+    }
+  }
+
   text.textContent = '';
   hint.classList.add('hidden');
   box.classList.remove('hidden');
+  box.classList.toggle('npc-dialogue', isNpc);
 
   // Typewriter
   dialogueTyping = true;
@@ -1093,7 +1136,7 @@ function showDialogue(spotId) {
       hint.classList.remove('hidden');
       dialoguePhase = 1;
     }
-  }, 35);
+  }, 30);
 }
 
 function closeDialogue() {
@@ -1571,19 +1614,20 @@ const LS_CUSTOM = 'portland_custom_spots';
 function saveCustomSpots() {
   localStorage.setItem(LS_CUSTOM, JSON.stringify(CUSTOM_SPOTS.map(s => ({
     name: s.name, category: s.category, description: s.description,
-    lat: s.lat, lng: s.lng, markerType: s.markerType, discovered: s.discovered
+    lat: s.lat, lng: s.lng, markerType: s.markerType, discovered: s.discovered,
+    npcEmoji: s.npcEmoji || ''
   }))));
 }
 
 function loadCustomSpots() {
   try {
     const data = JSON.parse(localStorage.getItem(LS_CUSTOM) || '[]');
-    data.forEach(d => addCustomSpotToGame(d.lat, d.lng, d.name, d.category, d.description, d.markerType, d.discovered));
+    data.forEach(d => addCustomSpotToGame(d.lat, d.lng, d.name, d.category, d.description, d.markerType, d.discovered, d.npcEmoji));
   } catch(e) {}
   renderEditorList();
 }
 
-function addCustomSpotToGame(lat, lng, name, category, description, markerType, discovered) {
+function addCustomSpotToGame(lat, lng, name, category, description, markerType, discovered, npcEmoji) {
   const id = ALL_SPOTS.length;
   const spot = {
     id, lat, lng, name,
@@ -1591,6 +1635,7 @@ function addCustomSpotToGame(lat, lng, name, category, description, markerType, 
     category: category || 'custom',
     description: description || 'A custom spot.',
     markerType: markerType || 'spot',
+    npcEmoji: (markerType === 'entity') ? (npcEmoji || '🧑') : '',
     discovered: !!discovered,
     visible: true,
     isCustom: true
@@ -1629,8 +1674,12 @@ function placeCustomSpot() {
   if (editorPendingLat === null) return;
   const category   = document.getElementById('editor-category').value;
   const markerType = document.getElementById('editor-type').value;
-  const desc       = document.getElementById('editor-description').value.trim() || 'A custom spot in Portland.';
-  addCustomSpotToGame(editorPendingLat, editorPendingLng, name, category, desc, markerType, false);
+  const npcEmoji   = document.getElementById('editor-npc-emoji').value || '🧑';
+  const desc       = document.getElementById('editor-description').value.trim() ||
+                     (markerType === 'entity'
+                       ? 'Hello, traveler! Welcome to Portland.'
+                       : 'A custom spot in Portland.');
+  addCustomSpotToGame(editorPendingLat, editorPendingLng, name, category, desc, markerType, false, npcEmoji);
   saveCustomSpots();
   renderEditorList();
   cancelEditorPlacement();
@@ -1644,7 +1693,32 @@ function cancelEditorPlacement() {
   document.getElementById('editor-description').value = '';
   document.getElementById('editor-crosshair-info').textContent = '';
   document.getElementById('editor-pos-display').textContent = 'Click map to set position';
+  // Reset emoji picker
+  const typeSel = document.getElementById('editor-type');
+  if (typeSel) typeSel.value = 'spot';
+  const emojiInput = document.getElementById('editor-npc-emoji');
+  if (emojiInput) emojiInput.value = '🧑';
+  toggleNpcEmojiPicker();
+  document.querySelectorAll('.npc-emoji-pick.active').forEach(b => b.classList.remove('active'));
+  const firstPick = document.querySelector('.npc-emoji-pick[data-emoji="🧑"]');
+  if (firstPick) firstPick.classList.add('active');
 }
+
+// Show/hide the emoji picker based on whether NPC type is selected
+function toggleNpcEmojiPicker() {
+  const isNpc = document.getElementById('editor-type').value === 'entity';
+  const row = document.getElementById('editor-npc-emoji-row');
+  if (row) row.style.display = isNpc ? 'block' : 'none';
+}
+
+// Wire up emoji-pick clicks (delegate)
+document.addEventListener('click', e => {
+  const btn = e.target.closest && e.target.closest('.npc-emoji-pick');
+  if (!btn) return;
+  document.querySelectorAll('.npc-emoji-pick').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('editor-npc-emoji').value = btn.dataset.emoji;
+});
 
 function deleteCustomSpot(id) {
   const idx = CUSTOM_SPOTS.findIndex(s => s.id === id);
