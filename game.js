@@ -10,8 +10,12 @@ const MOVE_DURATION    = 160;     // ms per step
 const INTERACT_DIST    = 60;      // meters — show SPACE prompt
 const VISIBLE_DIST     = 250;     // meters — spot becomes visible (radar range)
 const STREET_THRESHOLD_M = 22;    // max distance from a street centerline to walk
-const TRAIL_MAX_POINTS = 2000;    // cap trail length for performance
 const BASE_SPOT_COUNT  = 18;
+
+// Admin key — change this string and only share URLs with ?admin=THIS-VALUE
+// to enable editing/photo-upload UI. Anyone else opening the site sees a read-only view.
+const ADMIN_KEY = 'ash-portland-keeper-2026';
+let isAdmin = false;
 
 // Portland peninsula ONLY (excludes South Portland, Falmouth, etc.)
 // Tightened to just the peninsula proper.
@@ -69,10 +73,6 @@ let streetSegments = []; // [{a:[lat,lng], b:[lat,lng], minLat,maxLat,minLng,max
 let streetsLoaded  = false;
 let streetIndex    = null; // spatial bucket index for fast lookup
 
-// ── Trail (where you've walked) ──────────────────────────────────────────────
-let trailLine   = null;
-let trailPoints = [];
-
 // ── Map initialization ───────────────────────────────────────────────────────
 function initMap() {
   map = L.map('map', {
@@ -106,9 +106,10 @@ function initMap() {
   // Editor: click on map to place spot (when in editor mode)
   map.on('click', handleMapClick);
 
-  // Right-click anywhere on the map: instant editor placement (no need to toggle editor first)
+  // Right-click anywhere on the map: instant editor placement (admin only)
   map.on('contextmenu', e => {
     L.DomEvent.preventDefault(e);
+    if (!isAdmin) return;
     if (!editorMode) toggleEditor();
     handleMapClick(e);
   });
@@ -136,7 +137,7 @@ function recenterMap() {
   map.panTo(playerPos, { animate: true, duration: 0.35 });
 }
 
-// ── LIVE GEOLOCATION — track real GPS position + build trail as you walk ────
+// ── LIVE GEOLOCATION — track real GPS position as you walk ──────────────────
 let liveMode    = false;
 let liveWatchId = null;
 let lastLiveFix = 0;
@@ -202,9 +203,6 @@ function onLivePosition(pos) {
 
   // Update player position
   playerPos = [latitude, longitude];
-
-  // Add trail point (continuous walk tracking)
-  addTrailPoint();
 
   // Re-render player at new lat/lng
   syncPlayerScreenPos();
@@ -274,6 +272,7 @@ function savePhotoForSpot(id, dataUrl) {
 
 // Trigger the hidden file input from the card's photo button
 function triggerPhotoUpload() {
+  if (!isAdmin) return;
   const input = document.getElementById('card-photo-upload');
   if (input) input.click();
 }
@@ -309,6 +308,7 @@ async function handleCardPhotoUpload(e) {
 }
 
 function removePhotoFromSpot() {
+  if (!isAdmin) return;
   if (activeCard === null) return;
   if (!confirm('Remove this photo?')) return;
   const spot = ALL_SPOTS.find(s => s.id === activeCard);
@@ -322,6 +322,7 @@ function removePhotoFromSpot() {
 // Download the current spot's photo as a real .jpg file you can drop into
 // the repo's images/ folder. Also copies the matching spots.js snippet to clipboard.
 async function downloadPhotoForRepo() {
+  if (!isAdmin) return;
   const spot = ALL_SPOTS.find(s => s.id === activeCard);
   if (!spot || !spot.photo) {
     flashHud('⚠ No photo on this spot');
@@ -674,21 +675,6 @@ async function loadRealBoundary() {
 function zoomIn()  { if (map) map.setZoom(Math.min(MAX_ZOOM, map.getZoom() + 1)); }
 function zoomOut() { if (map) map.setZoom(Math.max(MIN_ZOOM, map.getZoom() - 1)); }
 
-// ── Trail visibility toggle ──────────────────────────────────────────────────
-let trailVisible = true;
-function toggleTrail() {
-  trailVisible = !trailVisible;
-  if (!trailLine) return;
-  if (trailVisible) trailLine.addTo(map);
-  else map.removeLayer(trailLine);
-  document.getElementById('trail-toggle-btn').classList.toggle('active', trailVisible);
-}
-
-function confirmClearTrail() {
-  if (trailPoints.length <= 1) return;
-  if (confirm('Clear your walking trail? This cannot be undone.')) clearTrail();
-}
-
 // ── Street network (OpenStreetMap via Overpass API) ──────────────────────────
 async function fetchStreets() {
   setLoadingMsg('Loading Portland streets...');
@@ -834,48 +820,6 @@ function snapToNearestStreet(lat, lng) {
   return best;
 }
 
-// ── Trail (Leaflet polyline of where player has walked) ──────────────────────
-function initTrail() {
-  trailLine = L.polyline(trailPoints, {
-    color: '#F6C90E',
-    weight: 4,
-    opacity: 0.55,
-    lineCap: 'round',
-    lineJoin: 'round',
-    smoothFactor: 1
-  }).addTo(map);
-
-  // Always include current position as a trail point
-  if (trailPoints.length === 0 || !samePoint(trailPoints[trailPoints.length - 1], playerPos)) {
-    trailPoints.push([...playerPos]);
-    trailLine.addLatLng(playerPos);
-  }
-}
-
-function samePoint(a, b) {
-  return Math.abs(a[0] - b[0]) < 1e-7 && Math.abs(a[1] - b[1]) < 1e-7;
-}
-
-function addTrailPoint() {
-  trailPoints.push([...playerPos]);
-  trailLine.addLatLng(playerPos);
-  if (trailPoints.length > TRAIL_MAX_POINTS) {
-    trailPoints.shift();
-    trailLine.setLatLngs(trailPoints);
-  }
-  // Throttled save
-  clearTimeout(addTrailPoint._timer);
-  addTrailPoint._timer = setTimeout(() => {
-    localStorage.setItem('portland_trail', JSON.stringify(trailPoints));
-  }, 800);
-}
-
-function clearTrail() {
-  trailPoints = [[...playerPos]];
-  if (trailLine) trailLine.setLatLngs(trailPoints);
-  localStorage.removeItem('portland_trail');
-}
-
 // ── Loading message helper ───────────────────────────────────────────────────
 function setLoadingMsg(msg) {
   const el = document.getElementById('hud-loading');
@@ -929,9 +873,6 @@ function tryMove(dir) {
 
   // Smooth pan to new position
   map.panTo(playerPos, { animate: true, duration: MOVE_DURATION / 1000, easeLinearity: 1 });
-
-  // Add trail point for the path-traveled feature
-  addTrailPoint();
 
   // Play footstep sound
   playFootstep();
@@ -1011,9 +952,6 @@ document.addEventListener('keydown', e => {
     toggleEditor();
   }
   if (e.key === 'm' || e.key === 'M') toggleMute();
-  if (e.key === 't' || e.key === 'T') {
-    if (!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) toggleTrail();
-  }
   if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomIn();  }
   if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomOut(); }
   if (e.key === 'r' || e.key === 'R') {
@@ -1231,14 +1169,18 @@ function openCard(id) {
   document.getElementById('card-distance').textContent = formatDistance(distM);
 
   // Photo (only show if URL is set)
-  const photoEl = document.getElementById('card-photo');
+  const photoEl   = document.getElementById('card-photo');
+  const photoWrap = document.getElementById('card-photo-wrap');
   if (spot.photo && spot.photo.trim()) {
     photoEl.src = spot.photo;
     photoEl.alt = spot.name;
     photoEl.style.display = 'block';
+    if (photoWrap) photoWrap.style.display = '';
   } else {
     photoEl.removeAttribute('src');
     photoEl.style.display = 'none';
+    // Non-admins shouldn't see the empty upload area at all
+    if (photoWrap) photoWrap.style.display = isAdmin ? '' : 'none';
   }
 
   // Personal "Ash's pick" italic note
@@ -1296,6 +1238,7 @@ function copySpotLink() {
 }
 
 function removeCustomSpotFromCard() {
+  if (!isAdmin) return;
   const id = activeCard;
   const spot = ALL_SPOTS.find(s => s.id === id);
   if (!spot || !spot.isCustom) return;
@@ -1604,7 +1547,6 @@ function loadState() {
     const vis   = JSON.parse(localStorage.getItem('portland_visible')     || '[]');
     const pos   = JSON.parse(localStorage.getItem('portland_pos')         || 'null');
     const score = parseInt(localStorage.getItem('portland_score')          || '0', 10);
-    const trail = JSON.parse(localStorage.getItem('portland_trail')       || '[]');
     const mut   = localStorage.getItem('portland_muted');
 
     disc.forEach((v, i) => { if (ALL_SPOTS[i]) ALL_SPOTS[i].discovered = !!v; });
@@ -1614,10 +1556,10 @@ function loadState() {
       playerPos = pos;
     }
     explorerScore = isNaN(score) ? 0 : score;
-    if (Array.isArray(trail) && trail.length > 0) {
-      trailPoints = trail;
-    }
     if (mut !== null) muted = mut === '1';
+
+    // Clean up old trail data from previous versions
+    localStorage.removeItem('portland_trail');
     document.getElementById('mute-btn').textContent = muted ? '✕' : '♪';
     document.getElementById('hud-score').textContent = explorerScore + ' / ' + BASE_SPOT_COUNT;
   } catch(e) { console.warn('State load error:', e); }
@@ -1660,6 +1602,7 @@ function addCustomSpotToGame(lat, lng, name, category, description, markerType, 
 }
 
 function toggleEditor() {
+  if (!isAdmin) return;
   editorMode = !editorMode;
   document.getElementById('editor-panel').classList.toggle('open', editorMode);
   document.getElementById('editor-toggle-btn').classList.toggle('active', editorMode);
@@ -1753,7 +1696,6 @@ function resetGame() {
   document.getElementById('hud-neighborhood').textContent = '';
   lastNeighborhood = '';
   map.setView(PORTLAND_CENTER, DEFAULT_ZOOM);
-  clearTrail();
   closeCard();
   closeDialogue();
 }
@@ -1789,6 +1731,15 @@ function startConfetti() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
+  // Detect admin mode from URL: ?admin=ADMIN_KEY
+  // Adds body.is-admin so CSS reveals editor / photo upload UI for the owner only
+  const urlParams = new URLSearchParams(window.location.search);
+  isAdmin = urlParams.get('admin') === ADMIN_KEY;
+  if (isAdmin) {
+    document.body.classList.add('is-admin');
+    console.log('Portland Explorer: admin mode enabled');
+  }
+
   loadState();
   loadCustomSpots();
   loadPhotos();
@@ -1796,9 +1747,6 @@ async function init() {
 
   // Center map on player
   map.setView(playerPos, DEFAULT_ZOOM);
-
-  // Initialize trail polyline (uses loaded trailPoints from loadState)
-  initTrail();
 
   // Fetch street network from Overpass — required for street-restricted walking
   await fetchStreets();
@@ -1808,10 +1756,6 @@ async function init() {
     const snapped = snapToNearestStreet(playerPos[0], playerPos[1]);
     playerPos = snapped;
     map.setView(playerPos, map.getZoom());
-    if (trailPoints.length === 0 || !samePoint(trailPoints[trailPoints.length - 1], playerPos)) {
-      trailPoints.push([...playerPos]);
-      trailLine.addLatLng(playerPos);
-    }
   }
 
   // Render all visible spots

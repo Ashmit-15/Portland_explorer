@@ -27,9 +27,7 @@
       <button class="hud-btn" id="recenter-btn" onclick="recenterMap()" title="Recenter on me (R)">&#127919;</button>
       <button class="hud-btn" id="zoom-out-btn" onclick="zoomOut()" title="Zoom out (-)">&#8722;</button>
       <button class="hud-btn" id="zoom-in-btn" onclick="zoomIn()" title="Zoom in (+)">+</button>
-      <button class="hud-btn" id="trail-toggle-btn" onclick="toggleTrail()" title="Show/hide trail (T)">&#127828;</button>
-      <button class="hud-btn" id="trail-clear-btn" onclick="confirmClearTrail()" title="Clear trail">&#128465;</button>
-      <button class="hud-btn" id="editor-toggle-btn" onclick="toggleEditor()" title="Editor (E)">&#9999;</button>
+      <button class="hud-btn admin-only" id="editor-toggle-btn" onclick="toggleEditor()" title="Editor (E)">&#9999;</button>
       <button class="hud-btn" id="mute-btn" onclick="toggleMute()" title="Mute (M)">&#9834;</button>
       <span id="hud-score">0 / 18</span>
     </div>
@@ -58,9 +56,9 @@
       <div id="card-photo-wrap">
         <img id="card-photo" alt="" />
         <input type="file" id="card-photo-upload" accept="image/*" style="display:none" onchange="handleCardPhotoUpload(event)" />
-        <button id="card-photo-add" onclick="triggerPhotoUpload()" title="Upload a photo">&#128247; ADD PHOTO</button>
-        <button id="card-photo-download" onclick="downloadPhotoForRepo()" title="Save this photo to drop into your /images folder">&#128190;</button>
-        <button id="card-photo-remove" onclick="removePhotoFromSpot()" title="Remove photo">&#10005;</button>
+        <button class="admin-only" id="card-photo-add" onclick="triggerPhotoUpload()" title="Upload a photo">&#128247; ADD PHOTO</button>
+        <button class="admin-only" id="card-photo-download" onclick="downloadPhotoForRepo()" title="Save this photo to drop into your /images folder">&#128190;</button>
+        <button class="admin-only" id="card-photo-remove" onclick="removePhotoFromSpot()" title="Remove photo">&#10005;</button>
       </div>
       <div class="card-header">
         <span class="card-icon" id="card-icon">&#9733;</span>
@@ -77,7 +75,7 @@
       <div class="card-actions">
         <button class="card-action" id="card-directions-btn" onclick="openDirections()" title="Walking directions in Google Maps">&#128205; DIRECTIONS</button>
         <button class="card-action" id="card-share-link" onclick="copySpotLink()" title="Copy link to this spot">&#128279; LINK</button>
-        <button class="card-action card-action-danger" id="card-remove-btn" onclick="removeCustomSpotFromCard()" title="Remove this custom spot">&#10005; REMOVE</button>
+        <button class="card-action card-action-danger admin-only" id="card-remove-btn" onclick="removeCustomSpotFromCard()" title="Remove this custom spot">&#10005; REMOVE</button>
       </div>
       <div class="card-footer">
         <span class="card-status" id="card-status"></span>

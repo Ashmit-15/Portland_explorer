@@ -146,7 +146,12 @@ html, body {
   color: #F6C90E;
 }
 
-#trail-toggle-btn.active { color: #F6C90E; }
+/* ── Admin-only UI gating ────────────────────────────────────────────────── */
+/* Hidden for everyone by default — only visible when body has .is-admin */
+.admin-only { display: none !important; }
+body.is-admin .admin-only { display: inline-flex !important; }
+body.is-admin button.card-action.admin-only { display: inline-block !important; }
+body.is-admin #editor-toggle-btn.admin-only { display: inline-flex !important; }
 
 #hud-weather {
   font-size: 18px !important;
@@ -1428,7 +1433,6 @@ body.weather-storm::after {
   }
 
   /* Hide less-essential buttons to fit screen */
-  #trail-clear-btn,
   #mute-btn,
   #zoom-out-btn { display: none; }
 
