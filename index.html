@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1A1A2E">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Portland Explorer — Find the Hidden City</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- HUD -->
+  <div id="hud">
+    <span id="hud-title">PORTLAND EXPLORER</span>
+    <span id="hud-neighborhood"></span>
+    <span id="hud-loading"></span>
+    <div id="hud-right">
+      <span id="hud-weather" title="Live Portland weather"></span>
+      <button class="hud-btn" id="live-btn" onclick="toggleLiveLocation()" title="Use my real location (G)">&#128225;</button>
+      <button class="hud-btn" id="surprise-btn" onclick="surpriseMe()" title="Random undiscovered spot">&#127922;</button>
+      <button class="hud-btn" id="list-toggle-btn" onclick="toggleList()" title="Browse all spots (L)">&#128203;</button>
+      <button class="hud-btn" id="recenter-btn" onclick="recenterMap()" title="Recenter on me (R)">&#127919;</button>
+      <button class="hud-btn" id="zoom-out-btn" onclick="zoomOut()" title="Zoom out (-)">&#8722;</button>
+      <button class="hud-btn" id="zoom-in-btn" onclick="zoomIn()" title="Zoom in (+)">+</button>
+      <button class="hud-btn" id="trail-toggle-btn" onclick="toggleTrail()" title="Show/hide trail (T)">&#127828;</button>
+      <button class="hud-btn" id="trail-clear-btn" onclick="confirmClearTrail()" title="Clear trail">&#128465;</button>
+      <button class="hud-btn" id="editor-toggle-btn" onclick="toggleEditor()" title="Editor (E)">&#9999;</button>
+      <button class="hud-btn" id="mute-btn" onclick="toggleMute()" title="Mute (M)">&#9834;</button>
+      <span id="hud-score">0 / 18</span>
+    </div>
+  </div>
+
+  <!-- LEAFLET MAP — fills screen below HUD -->
+  <div id="map"></div>
+
+  <!-- PLAYER SPRITE — always fixed in center of screen -->
+  <div id="player-wrapper">
+    <canvas id="player-sprite" width="32" height="48"></canvas>
+    <div id="interact-prompt" class="hidden">PRESS SPACE</div>
+  </div>
+
+  <!-- DIALOGUE BOX (Pokemon style) -->
+  <div id="dialogue-box" class="hidden">
+    <div class="dialogue-inner">
+      <div id="dialogue-text"></div>
+      <div id="dialogue-hint" class="hidden">&#9660; SPACE / TAP</div>
+    </div>
+  </div>
+
+  <!-- POPUP CARD -->
+  <div id="card" class="hidden">
+    <div class="card-inner">
+      <div id="card-photo-wrap">
+        <img id="card-photo" alt="" />
+        <input type="file" id="card-photo-upload" accept="image/*" style="display:none" onchange="handleCardPhotoUpload(event)" />
+        <button id="card-photo-add" onclick="triggerPhotoUpload()" title="Upload a photo">&#128247; ADD PHOTO</button>
+        <button id="card-photo-download" onclick="downloadPhotoForRepo()" title="Save this photo to drop into your /images folder">&#128190;</button>
+        <button id="card-photo-remove" onclick="removePhotoFromSpot()" title="Remove photo">&#10005;</button>
+      </div>
+      <div class="card-header">
+        <span class="card-icon" id="card-icon">&#9733;</span>
+        <div>
+          <h2 class="card-name" id="card-name"></h2>
+          <div class="card-meta">
+            <span id="card-neighborhood"></span> &middot; <span id="card-category"></span>
+            &middot; <span id="card-distance"></span>
+          </div>
+        </div>
+      </div>
+      <p class="card-description" id="card-description"></p>
+      <p class="card-pick" id="card-pick"></p>
+      <div class="card-actions">
+        <button class="card-action" id="card-directions-btn" onclick="openDirections()" title="Walking directions in Google Maps">&#128205; DIRECTIONS</button>
+        <button class="card-action" id="card-share-link" onclick="copySpotLink()" title="Copy link to this spot">&#128279; LINK</button>
+        <button class="card-action card-action-danger" id="card-remove-btn" onclick="removeCustomSpotFromCard()" title="Remove this custom spot">&#10005; REMOVE</button>
+      </div>
+      <div class="card-footer">
+        <span class="card-status" id="card-status"></span>
+        <button class="card-close" onclick="closeCard()">CLOSE &times;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEIGHBORHOOD TOAST -->
+  <div id="neighborhood-toast"></div>
+
+  <!-- LIST PANEL — browse all spots without walking -->
+  <div id="list-panel">
+    <div id="list-header">
+      <span>&#128203; PORTLAND SPOTS</span>
+      <button onclick="toggleList()">&#10005;</button>
+    </div>
+    <div id="list-author">
+      <span>By Ash &middot; <a href="https://instagram.com/" target="_blank" rel="noopener" id="list-instagram">@yourhandle</a></span>
+    </div>
+    <div id="list-controls">
+      <select id="list-filter">
+        <option value="all">All categories</option>
+        <option value="food">&#127860; Food</option>
+        <option value="nature">&#127807; Nature</option>
+        <option value="art">&#127912; Art</option>
+        <option value="nightlife">&#127866; Nightlife</option>
+        <option value="hidden gem">&#128142; Hidden Gem</option>
+        <option value="view">&#128065; View</option>
+        <option value="custom">&#11088; Custom</option>
+      </select>
+      <select id="list-sort">
+        <option value="distance">Nearest first</option>
+        <option value="name">A &rarr; Z</option>
+        <option value="discovered">Discovered first</option>
+      </select>
+    </div>
+    <div id="list-items"></div>
+  </div>
+
+  <!-- EDITOR PANEL -->
+  <div id="editor-panel">
+    <div id="editor-header">
+      <span>&#9999; EDITOR</span>
+      <button onclick="toggleEditor()">&#10005;</button>
+    </div>
+    <div id="editor-instructions">
+      Click anywhere on the map to place a spot — you don't need to walk there.<br>
+      <span style="color:#AED6F1;font-size:5px">Tip: right-click anywhere even outside editor mode for a quick place.</span>
+    </div>
+    <div id="editor-crosshair-info"></div>
+    <div id="editor-form">
+      <div class="editor-field">
+        <label>NAME</label>
+        <input type="text" id="editor-name" placeholder="Spot name" maxlength="40">
+      </div>
+      <div class="editor-field">
+        <label>TYPE</label>
+        <select id="editor-type">
+          <option value="spot">&#128205; Spot</option>
+          <option value="entity">&#129489; NPC / Entity</option>
+        </select>
+      </div>
+      <div class="editor-field">
+        <label>CATEGORY</label>
+        <select id="editor-category">
+          <option value="custom">&#11088; Custom</option>
+          <option value="food">Food</option>
+          <option value="nature">Nature</option>
+          <option value="art">Art</option>
+          <option value="nightlife">Nightlife</option>
+          <option value="hidden gem">Hidden Gem</option>
+          <option value="view">View</option>
+        </select>
+      </div>
+      <div class="editor-field">
+        <label>DESCRIPTION</label>
+        <textarea id="editor-description" placeholder="What's here?"></textarea>
+      </div>
+      <div id="editor-pos-display">Click map to set position</div>
+      <button id="editor-place-btn" onclick="placeCustomSpot()" disabled>PLACE ON MAP</button>
+      <button id="editor-cancel-btn" onclick="cancelEditorPlacement()">CANCEL</button>
+    </div>
+    <div id="editor-list">
+      <div id="editor-list-title">CUSTOM SPOTS (0)</div>
+      <div id="editor-list-items"><div id="editor-list-empty">No custom spots yet.</div></div>
+    </div>
+  </div>
+
+  <!-- D-PAD (mobile) -->
+  <div id="dpad">
+    <button class="dpad-btn" data-dir="up">&#9650;</button>
+    <div class="dpad-row">
+      <button class="dpad-btn" data-dir="left">&#9668;</button>
+      <div class="dpad-center"></div>
+      <button class="dpad-btn" data-dir="right">&#9658;</button>
+    </div>
+    <button class="dpad-btn" data-dir="down">&#9660;</button>
+  </div>
+
+  <!-- COMPLETION -->
+  <div id="completion">
+    <canvas id="confetti-canvas"></canvas>
+    <div id="completion-text">
+      <h1>YOU KNOW PORTLAND.</h1>
+      <p>You found every hidden spot in the city.</p>
+      <button onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="spots.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

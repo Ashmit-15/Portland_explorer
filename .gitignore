@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Claude Code session data (do not commit)
+.claude/
+
+# Dependency directories (none used right now, future-proofing)
+node_modules/
+
+# Local environment / secrets
+.env
+.env.local
+*.local
+
+# OS / build noise
+Thumbs.db
+*.log
